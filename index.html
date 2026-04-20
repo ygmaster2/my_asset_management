@@ -109,13 +109,36 @@
 
             useEffect(() => {
                 fetchData();
+                
+                // 서비스 워커 등록 (PWA 필수 조건)
+                if ('serviceWorker' in navigator) {
+                    window.addEventListener('load', () => {
+                        navigator.serviceWorker.register('/sw.js').catch(err => {
+                            console.log('Service Worker registration failed: ', err);
+                        });
+                    });
+                }
+
                 if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
                     setIsDarkMode(true);
                 }
-                window.addEventListener('beforeinstallprompt', (e) => {
+                
+                // 앱 설치 프롬프트 리스너
+                const handler = (e) => {
                     e.preventDefault();
                     setDeferredPrompt(e);
+                    console.log('beforeinstallprompt event was fired');
+                };
+
+                window.addEventListener('beforeinstallprompt', handler);
+                
+                // 앱이 이미 설치되었을 때의 처리
+                window.addEventListener('appinstalled', () => {
+                    setDeferredPrompt(null);
+                    console.log('PWA was installed');
                 });
+
+                return () => window.removeEventListener('beforeinstallprompt', handler);
             }, []);
 
             useEffect(() => {
