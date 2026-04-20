@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asset Management</title>
+    <title>자산 관리 PWA</title>
     
     <!-- 라이브러리 로드 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -13,6 +13,12 @@
     
     <!-- Lucide 아이콘 라이브러리 -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
@@ -26,21 +32,25 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        .transition-theme {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+        /* 스크롤바 숨기기 */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body>
+<body class="transition-theme">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // CDN 환경에서 Lucide 아이콘을 안전하게 렌더링하기 위한 컴포넌트
         const Icon = ({ name, size = 24, className = "" }) => {
             const iconRef = useRef(null);
 
             useEffect(() => {
                 if (window.lucide && iconRef.current) {
-                    const iconName = name.charAt(0).toLowerCase() + name.slice(1).replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
                     window.lucide.createIcons({
                         attrs: {
                             width: size,
@@ -58,7 +68,6 @@
             return <i data-lucide={name} ref={iconRef} className={className} style={{ width: size, height: size, display: 'inline-flex' }}></i>;
         };
 
-        // --- 구성 설정 ---
         const API_URL = "https://script.google.com/macros/s/AKfycbx4KDe0R9m8U4weUsWEReOvgpwlT-csznnQxSln5kes2Qr6s6FuUXW30zXpzexf7Ssl0A/exec";
 
         const SHEET_CONFIG = {
@@ -76,6 +85,12 @@
             });
             const [loading, setLoading] = useState(false);
             const [isSidebarOpen, setSidebarOpen] = useState(false);
+            const [isDarkMode, setIsDarkMode] = useState(false);
+            const [deferredPrompt, setDeferredPrompt] = useState(null);
+            
+            // 모달 관련 상태
+            const [editingItem, setEditingItem] = useState(null); // { title, index, isNew }
+            const [editForm, setEditForm] = useState({});
 
             const fetchData = async () => {
                 if (!API_URL) return;
@@ -93,7 +108,31 @@
 
             useEffect(() => {
                 fetchData();
+                if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    setIsDarkMode(true);
+                }
+                window.addEventListener('beforeinstallprompt', (e) => {
+                    e.preventDefault();
+                    setDeferredPrompt(e);
+                });
             }, []);
+
+            useEffect(() => {
+                if (isDarkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            }, [isDarkMode]);
+
+            const handleInstall = async () => {
+                if (!deferredPrompt) return;
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    setDeferredPrompt(null);
+                }
+            };
 
             const stats = useMemo(() => {
                 const getSum = (arr, key) => (arr || []).reduce((sum, item) => sum + (Number(item[key]) || 0), 0);
@@ -130,6 +169,42 @@
                 return item ? item.icon : 'RefreshCcw';
             };
 
+            const openEditModal = (title, row = null, index = null) => {
+                if (row === null) {
+                    // 신규 추가
+                    const emptyForm = {};
+                    SHEET_CONFIG[title].forEach(field => {
+                        emptyForm[field] = field === '날짜' ? new Date().toISOString().split('T')[0] : '';
+                    });
+                    setEditingItem({ title, index: null, isNew: true });
+                    setEditForm(emptyForm);
+                } else {
+                    // 수정
+                    setEditingItem({ title, index, isNew: false });
+                    setEditForm({ ...row });
+                }
+            };
+
+            const handleSaveEdit = () => {
+                const { title, index, isNew } = editingItem;
+                const newData = { ...data };
+                if (isNew) {
+                    newData[title] = [editForm, ...newData[title]];
+                } else {
+                    newData[title][index] = editForm;
+                }
+                setData(newData);
+                setEditingItem(null);
+            };
+
+            const handleDelete = (title, index) => {
+                if (confirm('정말로 이 항목을 삭제하시겠습니까?')) {
+                    const newData = { ...data };
+                    newData[title].splice(index, 1);
+                    setData(newData);
+                }
+            };
+
             const renderDetailView = (title) => {
                 const list = data[title] || [];
                 const headers = SHEET_CONFIG[title] || [];
@@ -138,37 +213,46 @@
 
                 return (
                     <div className="space-y-6 animate-in">
-                        <header className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-5">
-                            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                                <Icon name={iconName} size={28} />
+                        <header className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+                            <div className="flex items-center gap-5">
+                                <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                                    <Icon name={iconName} size={28} />
+                                </div>
+                                <div>
+                                    <h2 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{title} 자산 총액</h2>
+                                    <p className="text-3xl font-bold text-slate-800 dark:text-slate-100 mt-1">{formatKRW(total)}</p>
+                                </div>
                             </div>
-                            <div>
-                                <h2 className="text-slate-500 text-xs font-bold uppercase tracking-wider">{title} 자산 총액</h2>
-                                <p className="text-3xl font-bold text-slate-800 mt-1">{formatKRW(total)}</p>
-                            </div>
+                            <button 
+                                onClick={() => openEditModal(title)}
+                                className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-100 dark:shadow-none"
+                            >
+                                <Icon name="Plus" size={18} /> 항목 추가하기
+                            </button>
                         </header>
 
-                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                                <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                                    <Icon name="List" size={16} className="text-slate-400" /> 상세 거래 내역
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                                <h3 className="font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                                    <Icon name="List" size={16} className="text-slate-400" /> 상세 내역
                                 </h3>
-                                <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">{list.length}건</span>
+                                <span className="text-xs font-bold text-slate-400 bg-slate-50 dark:bg-slate-700 px-2 py-1 rounded-md">{list.length}건</span>
                             </div>
-                            <div className="overflow-x-auto">
+                            <div className="overflow-x-auto hide-scrollbar">
                                 <table className="w-full text-left text-sm">
-                                    <thead className="bg-slate-50 text-slate-500 font-medium">
+                                    <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 font-medium">
                                         <tr>
                                             {headers.map(header => (
                                                 <th key={header} className="p-4 whitespace-nowrap text-[11px] uppercase tracking-wider">{header}</th>
                                             ))}
+                                            <th className="p-4 text-[11px] uppercase tracking-wider text-center">관리</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-50">
+                                    <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
                                         {list.map((row, i) => (
-                                            <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                                 {headers.map((header) => (
-                                                    <td key={header} className="p-4 text-slate-600 whitespace-nowrap">
+                                                    <td key={header} className="p-4 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                                         <div className="flex items-center gap-2">
                                                             {header === '날짜' && <Icon name="Calendar" size={12} className="text-slate-300" />}
                                                             {typeof row[header] === 'number' 
@@ -177,13 +261,31 @@
                                                         </div>
                                                     </td>
                                                 ))}
+                                                <td className="p-4 whitespace-nowrap">
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <button 
+                                                            onClick={() => openEditModal(title, row, i)}
+                                                            className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-all"
+                                                            title="수정"
+                                                        >
+                                                            <Icon name="Pencil" size={14} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDelete(title, i)}
+                                                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-all"
+                                                            title="삭제"
+                                                        >
+                                                            <Icon name="Trash2" size={14} />
+                                                        </button>
+                                                    </div>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
                                 {list.length === 0 && (
                                     <div className="p-16 text-center">
-                                        <div className="inline-flex p-4 rounded-full bg-slate-50 text-slate-300 mb-4">
+                                        <div className="inline-flex p-4 rounded-full bg-slate-50 dark:bg-slate-700 text-slate-300 mb-4">
                                             <Icon name="RefreshCcw" size={32} />
                                         </div>
                                         <p className="text-slate-400">데이터가 없거나 불러오는 중입니다.</p>
@@ -196,9 +298,39 @@
             };
 
             return (
-                <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex">
+                <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex transition-theme">
+                    {/* 입력/수정 모달 */}
+                    {editingItem && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                            <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 dark:border-slate-700 animate-in">
+                                <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                                    <Icon name={editingItem.isNew ? "PlusCircle" : "Edit3"} size={20} className="text-blue-500" /> 
+                                    {editingItem.title} {editingItem.isNew ? "신규 추가" : "데이터 수정"}
+                                </h3>
+                                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 hide-scrollbar">
+                                    {SHEET_CONFIG[editingItem.title].map(field => (
+                                        <div key={field}>
+                                            <label className="text-[11px] font-bold text-slate-400 uppercase mb-1 block">{field}</label>
+                                            <input 
+                                                type={field.includes('금액') || field.includes('수량') || field.includes('가') || field.includes('손익') ? 'number' : (field === '날짜' ? 'date' : 'text')}
+                                                value={editForm[field] || ''}
+                                                placeholder={`${field} 입력`}
+                                                onChange={(e) => setEditForm({...editForm, [field]: e.target.type === 'number' ? Number(e.target.value) : e.target.value})}
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-theme"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-6 flex gap-3">
+                                    <button onClick={() => setEditingItem(null)} className="flex-1 py-3 rounded-xl font-bold bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 transition-all">취소</button>
+                                    <button onClick={handleSaveEdit} className="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white shadow-lg shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-all">저장</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <aside className={`
-                        fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out
+                        fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transform transition-transform duration-300 ease-in-out
                         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
                     `}>
                         <div className="p-6 flex items-center justify-between">
@@ -214,7 +346,7 @@
                                     onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
                                     className={`
                                         w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
-                                        ${activeTab === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-500 hover:bg-slate-50'}
+                                        ${activeTab === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}
                                     `}
                                 >
                                     <Icon name={item.icon} size={18} />
@@ -226,38 +358,53 @@
 
                     <main className="flex-1 md:ml-64 p-4 md:p-8 min-w-0 pb-24">
                         <div className="flex items-center justify-between mb-8">
-                            <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 bg-white rounded-lg shadow-sm border border-slate-200">
-                                <Icon name="Menu" size={20} />
-                            </button>
-                            <div className="hidden md:flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
-                                <Icon name="ShieldCheck" size={14} /> Asset Management System v1.0
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
+                                    <Icon name="Menu" size={20} />
+                                </button>
+                                {deferredPrompt && (
+                                    <button 
+                                        onClick={handleInstall}
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-xs font-bold hover:bg-blue-100 transition-all"
+                                    >
+                                        <Icon name="Download" size={14} /> 앱 설치하기
+                                    </button>
+                                )}
                             </div>
-                            <button 
-                                onClick={fetchData} 
-                                disabled={loading}
-                                className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm text-sm font-medium text-slate-600 hover:bg-slate-50 active:scale-95 transition-all border border-slate-200"
-                            >
-                                <Icon name="RefreshCcw" size={16} className={loading ? 'animate-spin' : ''} />
-                                {loading ? '동기화 중...' : '새로고침'}
-                            </button>
+                            <div className="flex items-center gap-3">
+                                <button 
+                                    onClick={() => setIsDarkMode(!isDarkMode)}
+                                    className="p-2 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition-theme"
+                                >
+                                    <Icon name={isDarkMode ? 'Sun' : 'Moon'} size={20} />
+                                </button>
+                                <button 
+                                    onClick={fetchData} 
+                                    disabled={loading}
+                                    className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 rounded-full shadow-sm text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 active:scale-95 transition-all border border-slate-200 dark:border-slate-700"
+                                >
+                                    <Icon name="RefreshCcw" size={16} className={loading ? 'animate-spin' : ''} />
+                                    <span className="hidden sm:inline">{loading ? '동기화 중...' : '새로고침'}</span>
+                                </button>
+                            </div>
                         </div>
 
                         {activeTab === 'Dashboard' ? (
                             <div className="space-y-6 animate-in">
-                                <div className="bg-slate-900 p-8 rounded-[2rem] text-white shadow-2xl relative overflow-hidden">
+                                <div className="bg-slate-900 dark:bg-blue-950 p-8 rounded-[2rem] text-white shadow-2xl relative overflow-hidden transition-theme">
                                     <div className="relative z-10">
                                         <div className="flex items-center gap-2 mb-2">
                                             <Icon name="Activity" size={14} className="text-blue-400" />
                                             <h3 className="text-slate-400 text-sm font-medium uppercase tracking-widest">Total Net Worth</h3>
                                         </div>
                                         <p className="text-4xl md:text-5xl font-bold tracking-tight">{formatKRW(stats.grandTotal)}</p>
-                                        <div className="mt-8 flex flex-wrap gap-3">
+                                        <div className="mt-8 flex flex-wrap gap-4">
                                             {Object.entries(stats.totals).map(([key, val]) => (
-                                                <div key={key} className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl backdrop-blur-sm flex items-center gap-2">
-                                                    <Icon name={getAssetIcon(key)} size={12} className="text-blue-400" />
+                                                <div key={key} className="bg-white/5 border border-white/10 px-5 py-3 rounded-2xl backdrop-blur-sm flex items-center gap-3 min-w-[140px]">
+                                                    <Icon name={getAssetIcon(key)} size={16} className="text-blue-400" />
                                                     <div>
-                                                        <span className="text-[10px] text-slate-400 block uppercase">{key}</span>
-                                                        <span className="text-sm font-semibold">{formatKRW(val)}</span>
+                                                        <span className="text-[11px] text-slate-400 block uppercase font-bold">{key}</span>
+                                                        <span className="text-base font-bold">{formatKRW(val)}</span>
                                                     </div>
                                                 </div>
                                             ))}
@@ -273,20 +420,20 @@
                                         <div 
                                             key={item.id} 
                                             onClick={() => setActiveTab(item.id)}
-                                            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group"
+                                            className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group"
                                         >
                                             <div className="flex justify-between items-center">
-                                                <div className="p-3 rounded-2xl bg-slate-50 text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
+                                                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
                                                     <Icon name={item.icon} size={22} />
                                                 </div>
-                                                <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest group-hover:text-blue-200 inline-flex items-center gap-1">
+                                                <div className="text-[10px] font-bold text-slate-300 dark:text-slate-500 uppercase tracking-widest group-hover:text-blue-400 dark:group-hover:text-blue-400 inline-flex items-center gap-1">
                                                     상세보기 <Icon name="ChevronRight" size={10} />
                                                 </div>
                                             </div>
-                                            <h4 className="mt-6 text-slate-500 text-xs font-bold uppercase tracking-wider">{item.label}</h4>
-                                            <p className="text-2xl font-bold text-slate-800 mt-1">{formatKRW(stats.totals[item.id])}</p>
+                                            <h4 className="mt-6 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{item.label}</h4>
+                                            <p className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{formatKRW(stats.totals[item.id])}</p>
                                             <div className="mt-4 flex items-center gap-2">
-                                                <div className="flex-1 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                                <div className="flex-1 bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
                                                     <div 
                                                         className="bg-blue-600 h-full rounded-full transition-all duration-1000" 
                                                         style={{ width: `${(stats.totals[item.id] / (stats.grandTotal || 1)) * 100}%` }}
@@ -305,17 +452,26 @@
                         )}
                     </main>
 
-                    <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-200 px-6 py-3 flex justify-between items-center md:hidden z-40">
+                    <nav className="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-6 py-3 flex justify-between items-center md:hidden z-40">
                         {menuItems.slice(0, 4).map(item => (
                             <button 
                                 key={item.id} 
                                 onClick={() => setActiveTab(item.id)}
-                                className={`p-2 rounded-xl transition-all ${activeTab === item.id ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}
+                                className={`p-2 rounded-xl transition-all ${activeTab === item.id ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/30' : 'text-slate-400'}`}
                             >
                                 <Icon name={item.icon} size={24} />
                             </button>
                         ))}
-                        <button className="p-3 bg-slate-900 text-white rounded-full shadow-lg transform -translate-y-4 border-4 border-slate-50">
+                        <button 
+                            onClick={() => {
+                                if (activeTab !== 'Dashboard') {
+                                    openEditModal(activeTab);
+                                } else {
+                                    setActiveTab('입출금');
+                                }
+                            }}
+                            className="p-3 bg-slate-900 dark:bg-blue-600 text-white rounded-full shadow-lg transform -translate-y-4 border-4 border-slate-50 dark:border-slate-950"
+                        >
                             <Icon name="PlusCircle" size={24} />
                         </button>
                     </nav>
