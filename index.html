@@ -38,6 +38,8 @@
         /* 스크롤바 숨기기 */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .chart-bar { transition: height 0.5s ease-out; }
     </style>
 </head>
 <body class="transition-theme">
@@ -88,8 +90,7 @@
             const [isDarkMode, setIsDarkMode] = useState(false);
             const [deferredPrompt, setDeferredPrompt] = useState(null);
             
-            // 모달 관련 상태
-            const [editingItem, setEditingItem] = useState(null); // { title, index, isNew }
+            const [editingItem, setEditingItem] = useState(null); 
             const [editForm, setEditForm] = useState({});
 
             const fetchData = async () => {
@@ -428,8 +429,12 @@
                                         <p className="text-4xl md:text-5xl font-bold tracking-tight">{formatKRW(stats.grandTotal)}</p>
                                         <div className="mt-8 flex flex-wrap gap-4">
                                             {Object.entries(stats.totals).map(([key, val]) => (
-                                                <div key={key} className="bg-white/5 border border-white/10 px-5 py-3 rounded-2xl backdrop-blur-sm flex items-center gap-3 min-w-[140px]">
-                                                    <Icon name={getAssetIcon(key)} size={16} className="text-blue-400" />
+                                                <div 
+                                                    key={key} 
+                                                    onClick={() => setActiveTab(key)}
+                                                    className="bg-white/5 border border-white/10 px-5 py-3 rounded-2xl backdrop-blur-sm flex items-center gap-3 min-w-[140px] cursor-pointer hover:bg-white/20 hover:scale-105 transition-all duration-300 group"
+                                                >
+                                                    <Icon name={getAssetIcon(key)} size={16} className="text-blue-400 group-hover:text-blue-300" />
                                                     <div>
                                                         <span className="text-[11px] text-slate-400 block uppercase font-bold">{key}</span>
                                                         <span className="text-base font-bold">{formatKRW(val)}</span>
@@ -443,36 +448,54 @@
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
-                                    {menuItems.slice(1).map(item => (
-                                        <div 
-                                            key={item.id} 
-                                            onClick={() => setActiveTab(item.id)}
-                                            className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group"
-                                        >
-                                            <div className="flex justify-between items-center">
-                                                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
-                                                    <Icon name={item.icon} size={22} />
-                                                </div>
-                                                <div className="text-[10px] font-bold text-slate-300 dark:text-slate-500 uppercase tracking-widest group-hover:text-blue-400 dark:group-hover:text-blue-400 inline-flex items-center gap-1">
-                                                    상세보기 <Icon name="ChevronRight" size={10} />
-                                                </div>
-                                            </div>
-                                            <h4 className="mt-6 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{item.label}</h4>
-                                            <p className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{formatKRW(stats.totals[item.id])}</p>
-                                            <div className="mt-4 flex items-center gap-2">
-                                                <div className="flex-1 bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                {/* 월별 자산 증감 및 자산 비중 그래프 영역 */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                                    {/* 월별 자산 증감 현황 (Mock Chart) */}
+                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                        <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase mb-6 flex items-center gap-2">
+                                            <Icon name="BarChart3" size={16} /> 월별 자산 증감 현황
+                                        </h3>
+                                        <div className="h-48 flex items-end justify-between gap-2 px-2">
+                                            {[45, 60, 55, 75, 85, 100].map((h, i) => (
+                                                <div key={i} className="flex-1 flex flex-col items-center gap-2">
                                                     <div 
-                                                        className="bg-blue-600 h-full rounded-full transition-all duration-1000" 
-                                                        style={{ width: `${(stats.totals[item.id] / (stats.grandTotal || 1)) * 100}%` }}
-                                                    ></div>
+                                                        className="w-full bg-blue-100 dark:bg-blue-900/40 rounded-t-lg relative group overflow-hidden"
+                                                        style={{ height: `${h}%` }}
+                                                    >
+                                                        <div className="absolute inset-x-0 bottom-0 bg-blue-600 rounded-t-lg transition-all duration-1000 h-0 group-hover:h-full"></div>
+                                                        <div className="bg-blue-500 w-full h-full rounded-t-lg opacity-80"></div>
+                                                    </div>
+                                                    <span className="text-[10px] text-slate-400 font-bold">{i + 7}월</span>
                                                 </div>
-                                                <span className="text-[10px] font-bold text-slate-400">
-                                                    {Math.round((stats.totals[item.id] / (stats.grandTotal || 1)) * 100)}%
-                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* 자산 영역별 비중 그래프 */}
+                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col">
+                                        <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase mb-6 flex items-center gap-2">
+                                            <Icon name="PieChart" size={16} /> 자산 영역별 비중
+                                        </h3>
+                                        <div className="flex-1 flex items-center justify-around">
+                                            <div className="relative w-32 h-32 rounded-full border-[16px] border-slate-50 dark:border-slate-700 flex items-center justify-center">
+                                                <div className="absolute inset-0 rounded-full border-[16px] border-blue-500 border-t-transparent border-r-transparent rotate-45"></div>
+                                                <span className="text-xs font-bold text-slate-400">Portfolio</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {Object.entries(stats.totals).map(([key, val], i) => {
+                                                    const colors = ['bg-blue-500', 'bg-indigo-500', 'bg-purple-500', 'bg-sky-500', 'bg-slate-400'];
+                                                    const percent = Math.round((val / (stats.grandTotal || 1)) * 100);
+                                                    return (
+                                                        <div key={key} className="flex items-center gap-3">
+                                                            <div className={`w-2 h-2 rounded-full ${colors[i % colors.length]}`}></div>
+                                                            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 w-20">{key}</span>
+                                                            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">{percent}%</span>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
-                                    ))}
+                                    </div>
                                 </div>
                             </div>
                         ) : (
