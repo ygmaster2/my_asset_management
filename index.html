@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asset Management</title>
+    <title>자산 관리 PWA</title>
     
     <!-- 라이브러리 로드 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -149,8 +149,19 @@
                     "연금저축펀드": getEvalSum(data["연금저축펀드"]),
                     "개인투자용국채": getSum(data["개인투자용국채"], "매입금액")
                 };
+
+                // 주식 상세 지표 계산
+                const stockInvestSum = getSum(data["주식투자"], "매입금액");
+                const stockProfitSum = getSum(data["주식투자"], "평가손익");
+                const stockYield = stockInvestSum > 0 ? (stockProfitSum / stockInvestSum) * 100 : 0;
+
+                // 연금저축펀드 상세 지표 계산
+                const pensionInvestSum = getSum(data["연금저축펀드"], "매입금액");
+                const pensionProfitSum = getSum(data["연금저축펀드"], "평가손익");
+                const pensionYield = pensionInvestSum > 0 ? (pensionProfitSum / pensionInvestSum) * 100 : 0;
+
                 const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
-                return { totals, grandTotal };
+                return { totals, grandTotal, stockInvestSum, stockProfitSum, stockYield, pensionInvestSum, pensionProfitSum, pensionYield };
             }, [data]);
 
             const menuItems = [
@@ -171,7 +182,6 @@
 
             const openEditModal = (title, row = null, index = null) => {
                 if (row === null) {
-                    // 신규 추가
                     const emptyForm = {};
                     SHEET_CONFIG[title].forEach(field => {
                         emptyForm[field] = field === '날짜' ? new Date().toISOString().split('T')[0] : '';
@@ -179,7 +189,6 @@
                     setEditingItem({ title, index: null, isNew: true });
                     setEditForm(emptyForm);
                 } else {
-                    // 수정
                     setEditingItem({ title, index, isNew: false });
                     setEditForm({ ...row });
                 }
@@ -211,21 +220,51 @@
                 const total = stats.totals[title];
                 const iconName = getAssetIcon(title);
 
+                // 요약 정보 계산
+                const isInvestmentType = title === '주식투자' || title === '연금저축펀드';
+                const investSum = title === '주식투자' ? stats.stockInvestSum : stats.pensionInvestSum;
+                const profitSum = title === '주식투자' ? stats.stockProfitSum : stats.pensionProfitSum;
+                const yieldVal = title === '주식투자' ? stats.stockYield : stats.pensionYield;
+
                 return (
                     <div className="space-y-6 animate-in">
-                        <header className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-                            <div className="flex items-center gap-5">
-                                <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                                    <Icon name={iconName} size={28} />
+                        <header className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                            <div className="flex flex-col md:flex-row md:items-center gap-6 flex-1">
+                                <div className="flex items-center gap-5">
+                                    <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                                        <Icon name={iconName} size={28} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{title} 자산 총액</h2>
+                                        <p className="text-3xl font-bold text-slate-800 dark:text-slate-100 mt-1">{formatKRW(total)}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h2 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">{title} 자산 총액</h2>
-                                    <p className="text-3xl font-bold text-slate-800 dark:text-slate-100 mt-1">{formatKRW(total)}</p>
-                                </div>
+                                
+                                {isInvestmentType && (
+                                    <div className="flex flex-wrap gap-4 md:border-l md:border-slate-100 dark:md:border-slate-700 md:pl-6">
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">투자 금액</span>
+                                            <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{formatKRW(investSum)}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">수익 금액</span>
+                                            <p className={`text-sm font-semibold ${profitSum >= 0 ? 'text-rose-500' : 'text-blue-500'}`}>
+                                                {profitSum >= 0 ? '+' : ''}{profitSum.toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">수익률</span>
+                                            <p className={`text-sm font-semibold ${yieldVal >= 0 ? 'text-rose-500' : 'text-blue-500'}`}>
+                                                {yieldVal >= 0 ? '+' : ''}{yieldVal.toFixed(2)}%
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
+                            
                             <button 
                                 onClick={() => openEditModal(title)}
-                                className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-100 dark:shadow-none"
+                                className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-100 dark:shadow-none shrink-0"
                             >
                                 <Icon name="Plus" size={18} /> 항목 추가하기
                             </button>
@@ -335,7 +374,7 @@
                     `}>
                         <div className="p-6 flex items-center justify-between">
                             <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2">
-                                <Icon name="TrendingUp" size={24} /> Asset Management
+                                <Icon name="TrendingUp" size={24} /> 자산관리
                             </h1>
                             <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400"><Icon name="X" /></button>
                         </div>
