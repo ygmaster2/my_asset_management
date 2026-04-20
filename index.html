@@ -1,0 +1,235 @@
+import React, { useState, useEffect } from 'react';
+import { Wallet, PlusCircle, History, Landmark, Tag, DollarSign, MessageSquare, Loader2, ShieldCheck } from 'lucide-react';
+
+const App = () => {
+  // 환경 설정
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbz40_5HDR17hdbiXTW1TdpHqabCYfkgSs_fuAxkFHOaAaFci3Y9Hvd_sWw1rI-0fOi9pA/exec";
+  const API_KEY = "your-secret-api-key-here"; // GAS에 설정한 키와 동일해야 합니다.
+
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
+  const [data, setData] = useState({
+    banks: [],
+    categories: [],
+    recentLogs: []
+  });
+
+  const [form, setForm] = useState({
+    bank: '',
+    category: '',
+    amount: '',
+    memo: ''
+  });
+
+  // 인증이 포함된 데이터 불러오기
+  const fetchData = async () => {
+    try {
+      const response = await fetch(`${GAS_URL}?key=${API_KEY}`);
+      const result = await response.json();
+      
+      if (result.status === 'error') {
+        alert("인증에 실패했습니다. API 키를 확인하세요.");
+        return;
+      }
+      
+      setData(result);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.bank || !form.category || !form.amount) {
+      alert("필수 항목을 모두 입력해주세요.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // POST 요청 시에도 쿼리 파라미터로 키 전달 (GAS의 제한 사항 때문)
+      const response = await fetch(`${GAS_URL}?key=${API_KEY}`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'add', ...form }),
+      });
+      const result = await response.json();
+      
+      if (result.status === 'success') {
+        setForm({ bank: '', category: '', amount: '', memo: '' });
+        await fetchData();
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error("Error saving data:", error);
+      alert("데이터 저장 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
+      <div className="max-w-4xl mx-auto space-y-6">
+        
+        {/* Header */}
+        <header className="flex justify-between items-center mb-8">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-600 p-2 rounded-lg text-white">
+              <Wallet size={28} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800">입출금 관리 시스템</h1>
+              <p className="text-sm text-slate-500 flex items-center gap-1">
+                <ShieldCheck size={12} className="text-green-500" /> 보안 연결 활성화됨
+              </p>
+            </div>
+          </div>
+        </header>
+
+        {/* Form Section */}
+        <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <PlusCircle size={20} className="text-blue-500" />
+            내역 기록
+          </h2>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-600 flex items-center gap-1">
+                <Landmark size={14} /> 금융사
+              </label>
+              <input
+                list="bank-list"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                placeholder="금융사 입력/선택"
+                value={form.bank}
+                onChange={(e) => setForm({...form, bank: e.target.value})}
+              />
+              <datalist id="bank-list">
+                {data.banks.map((b, i) => <option key={i} value={b} />)}
+              </datalist>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-600 flex items-center gap-1">
+                <Tag size={14} /> 종류
+              </label>
+              <input
+                list="category-list"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                placeholder="종류 입력/선택"
+                value={form.category}
+                onChange={(e) => setForm({...form, category: e.target.value})}
+              />
+              <datalist id="category-list">
+                {data.categories.map((c, i) => <option key={i} value={c} />)}
+              </datalist>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-600 flex items-center gap-1">
+                <DollarSign size={14} /> 금액
+              </label>
+              <input
+                type="number"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                placeholder="금액 입력"
+                value={form.amount}
+                onChange={(e) => setForm({...form, amount: e.target.value})}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-600 flex items-center gap-1">
+                <MessageSquare size={14} /> 비고
+              </label>
+              <input
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                placeholder="간단한 메모"
+                value={form.memo}
+                onChange={(e) => setForm({...form, memo: e.target.value})}
+              />
+            </div>
+
+            <div className="md:col-span-2 pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="animate-spin" size={20} /> : "데이터 저장하기"}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        {/* History Section */}
+        <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <History size={20} className="text-slate-500" />
+              최근 20개 내역
+            </h2>
+            <button 
+              onClick={fetchData}
+              className="text-xs text-blue-600 font-medium p-2 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              새로고침
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 text-xs uppercase font-bold">
+                  <th className="px-6 py-3 border-b border-slate-100">순번</th>
+                  <th className="px-6 py-3 border-b border-slate-100">금융사</th>
+                  <th className="px-6 py-3 border-b border-slate-100">종류</th>
+                  <th className="px-6 py-3 border-b border-slate-100 text-right">금액</th>
+                  <th className="px-6 py-3 border-b border-slate-100">비고</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm divide-y divide-slate-100">
+                {fetching ? (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-12 text-center text-slate-400">
+                      <Loader2 className="animate-spin mx-auto mb-2" />
+                      데이터를 불러오는 중입니다...
+                    </td>
+                  </tr>
+                ) : data.recentLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-12 text-center text-slate-400">기록된 내역이 없습니다.</td>
+                  </tr>
+                ) : (
+                  data.recentLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 text-slate-500">{log.id}</td>
+                      <td className="px-6 py-4 font-medium text-slate-800">{log.bank}</td>
+                      <td className="px-6 py-4">
+                        <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs">
+                          {log.category}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-blue-600">
+                        {Number(log.amount).toLocaleString()}원
+                      </td>
+                      <td className="px-6 py-4 text-slate-500 max-w-[150px] truncate">{log.memo}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};
+
+export default App;
