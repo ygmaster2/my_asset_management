@@ -1,275 +1,330 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  LayoutDashboard, 
-  Wallet, 
-  TrendingUp, 
-  PiggyBank, 
-  PieChart, 
-  ScrollText,
-  ChevronRight,
-  Menu,
-  X,
-  PlusCircle,
-  RefreshCcw
-} from 'lucide-react';
-
-// --- 구성 설정 ---
-const API_URL = "https://script.google.com/macros/s/AKfycbx4KDe0R9m8U4weUsWEReOvgpwlT-csznnQxSln5kes2Qr6s6FuUXW30zXpzexf7Ssl0A/exec"; // 배포한 GAS 웹 앱 URL을 여기에 입력하세요.
-
-// 각 영역별 시트 헤더 정의 (사용자 제공 정보 반영)
-const SHEET_CONFIG = {
-  "입출금": ["날짜", "금융사", "종류", "금액", "비고"],
-  "주식투자": ["날짜", "증권사", "종목명", "매입금액", "현재가", "보유수량", "평가손익", "비고"],
-  "예적금": ["날짜", "상품명", "은행", "금액", "비고"],
-  "연금저축펀드": ["날짜", "증권사", "종목명", "매입금액", "현재가", "보유수량", "평가손익", "비고"],
-  "개인투자용국채": ["날짜", "증권사", "매입금액", "비고"]
-};
-
-const App = () => {
-  const [activeTab, setActiveTab] = useState('Dashboard');
-  const [data, setData] = useState({
-    "입출금": [],
-    "주식투자": [],
-    "예적금": [],
-    "연금저축펀드": [],
-    "개인투자용국채": []
-  });
-  const [loading, setLoading] = useState(false);
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
-
-  // 데이터 불러오기
-  const fetchData = async () => {
-    if (!API_URL) return;
-    setLoading(true);
-    try {
-      const response = await fetch(API_URL);
-      const json = await response.json();
-      setData(json);
-    } catch (error) {
-      console.error("데이터 로드 실패:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  // 통계 계산 로직
-  const stats = useMemo(() => {
-    const getSum = (arr, key) => (arr || []).reduce((sum, item) => sum + (Number(item[key]) || 0), 0);
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>자산 관리 PWA</title>
     
-    // 주식/연금저축펀드 평가금액 계산 (매입금액 + 평가손익)
-    const getEvalSum = (arr) => (arr || []).reduce((sum, item) => {
-      const buy = Number(item['매입금액']) || 0;
-      const profit = Number(item['평가손익']) || 0;
-      return sum + buy + profit;
-    }, 0);
+    <!-- 라이브러리 로드 -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide 아이콘 라이브러리 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
+        body { 
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; 
+        }
+        .animate-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-    const totals = {
-      "입출금": getSum(data["입출금"], "금액"),
-      "주식투자": getEvalSum(data["주식투자"]),
-      "예적금": getSum(data["예적금"], "금액"),
-      "연금저축펀드": getEvalSum(data["연금저축펀드"]),
-      "개인투자용국채": getSum(data["개인투자용국채"], "매입금액")
-    };
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
 
-    const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
+        // CDN 환경에서 Lucide 아이콘을 안전하게 렌더링하기 위한 컴포넌트
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const iconRef = useRef(null);
 
-    return { totals, grandTotal };
-  }, [data]);
+            useEffect(() => {
+                if (window.lucide && iconRef.current) {
+                    const iconName = name.charAt(0).toLowerCase() + name.slice(1).replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
+                    window.lucide.createIcons({
+                        attrs: {
+                            width: size,
+                            height: size,
+                            class: className,
+                            'stroke-width': 2
+                        },
+                        icons: {
+                            [name]: window.lucide.icons[name]
+                        }
+                    });
+                }
+            }, [name, size, className]);
 
-  const menuItems = [
-    { id: 'Dashboard', label: '대시보드', icon: LayoutDashboard },
-    { id: '입출금', label: '입출금', icon: Wallet },
-    { id: '주식투자', label: '주식투자', icon: TrendingUp },
-    { id: '예적금', label: '예적금', icon: PiggyBank },
-    { id: '연금저축펀드', label: '연금저축펀드', icon: PieChart },
-    { id: '개인투자용국채', label: '개인투자용국채', icon: ScrollText },
-  ];
+            return <i data-lucide={name} ref={iconRef} className={className} style={{ width: size, height: size, display: 'inline-flex' }}></i>;
+        };
 
-  const formatKRW = (val) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(val);
+        // --- 구성 설정 ---
+        const API_URL = "https://script.google.com/macros/s/AKfycbx4KDe0R9m8U4weUsWEReOvgpwlT-csznnQxSln5kes2Qr6s6FuUXW30zXpzexf7Ssl0A/exec";
 
-  // 상세 데이터 렌더링
-  const renderDetailView = (title) => {
-    const list = data[title] || [];
-    const headers = SHEET_CONFIG[title] || [];
-    const total = stats.totals[title];
+        const SHEET_CONFIG = {
+            "입출금": ["날짜", "금융사", "종류", "금액", "비고"],
+            "주식투자": ["날짜", "증권사", "종목명", "매입금액", "현재가", "보유수량", "평가손익", "비고"],
+            "예적금": ["날짜", "상품명", "은행", "금액", "비고"],
+            "연금저축펀드": ["날짜", "증권사", "종목명", "매입금액", "현재가", "보유수량", "평가손익", "비고"],
+            "개인투자용국채": ["날짜", "증권사", "매입금액", "비고"]
+        };
 
-    return (
-      <div className="space-y-6 animate-in fade-in duration-500">
-        <header className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h2 className="text-slate-500 text-sm font-medium">{title} 자산 총액</h2>
-          <p className="text-3xl font-bold text-slate-800 mt-1">{formatKRW(total)}</p>
-        </header>
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('Dashboard');
+            const [data, setData] = useState({
+                "입출금": [], "주식투자": [], "예적금": [], "연금저축펀드": [], "개인투자용국채": []
+            });
+            const [loading, setLoading] = useState(false);
+            const [isSidebarOpen, setSidebarOpen] = useState(false);
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-            <h3 className="font-semibold text-slate-700">거래 내역</h3>
-            <span className="text-xs text-slate-400">{list.length}건</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-500 font-medium">
-                <tr>
-                  {headers.map(header => (
-                    <th key={header} className="p-4 whitespace-nowrap">{header}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {list.map((row, i) => (
-                  <tr key={i} className="hover:bg-slate-50 transition-colors">
-                    {headers.map((header) => (
-                      <td key={header} className="p-4 text-slate-600 whitespace-nowrap">
-                        {typeof row[header] === 'number' 
-                          ? row[header].toLocaleString() 
-                          : (row[header] ? String(row[header]) : '-')}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {list.length === 0 && (
-              <div className="p-16 text-center">
-                <div className="inline-flex p-4 rounded-full bg-slate-50 text-slate-300 mb-4">
-                  <RefreshCcw size={32} />
-                </div>
-                <p className="text-slate-400">데이터가 없거나 불러오는 중입니다.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
+            const fetchData = async () => {
+                if (!API_URL) return;
+                setLoading(true);
+                try {
+                    const response = await fetch(API_URL);
+                    const json = await response.json();
+                    setData(json);
+                } catch (error) {
+                    console.error("데이터 로드 실패:", error);
+                } finally {
+                    setLoading(false);
+                }
+            };
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex">
-      {/* Sidebar */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
-      `}>
-        <div className="p-6 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2">
-            <TrendingUp size={24} /> 자산관리
-          </h1>
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400"><X /></button>
-        </div>
-        <nav className="mt-4 px-3 space-y-1">
-          {menuItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
-              className={`
-                w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
-                ${activeTab === item.id ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}
-              `}
-            >
-              <item.icon size={18} />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
+            useEffect(() => {
+                fetchData();
+            }, []);
 
-      {/* Main Content */}
-      <main className="flex-1 md:ml-64 p-4 md:p-8 min-w-0 pb-24">
-        {/* Top Header */}
-        <div className="flex items-center justify-between mb-8">
-          <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 bg-white rounded-lg shadow-sm border border-slate-200">
-            <Menu size={20} />
-          </button>
-          <div className="hidden md:block text-slate-400 text-sm font-medium uppercase tracking-wider">
-            Asset Management System v1.0
-          </div>
-          <button 
-            onClick={fetchData} 
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm text-sm font-medium text-slate-600 hover:bg-slate-50 active:scale-95 transition-all border border-slate-200"
-          >
-            <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
-            {loading ? '동기화 중...' : '새로고침'}
-          </button>
-        </div>
+            const stats = useMemo(() => {
+                const getSum = (arr, key) => (arr || []).reduce((sum, item) => sum + (Number(item[key]) || 0), 0);
+                const getEvalSum = (arr) => (arr || []).reduce((sum, item) => {
+                    const buy = Number(item['매입금액']) || 0;
+                    const profit = Number(item['평가손익']) || 0;
+                    return sum + buy + profit;
+                }, 0);
 
-        {activeTab === 'Dashboard' ? (
-          <div className="space-y-6 animate-in fade-in duration-500">
-            {/* Total Asset Card */}
-            <div className="bg-slate-900 p-8 rounded-[2rem] text-white shadow-2xl relative overflow-hidden">
-              <div className="relative z-10">
-                <h3 className="text-slate-400 text-sm font-medium uppercase tracking-widest">Total Net Worth</h3>
-                <p className="text-4xl md:text-5xl font-bold mt-2 tracking-tight">{formatKRW(stats.grandTotal)}</p>
-                <div className="mt-8 flex flex-wrap gap-3">
-                  {Object.entries(stats.totals).map(([key, val]) => (
-                    <div key={key} className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl backdrop-blur-sm">
-                      <span className="text-[10px] text-slate-400 block uppercase mb-1">{key}</span>
-                      <span className="text-sm font-semibold">{formatKRW(val)}</span>
+                const totals = {
+                    "입출금": getSum(data["입출금"], "금액"),
+                    "주식투자": getEvalSum(data["주식투자"]),
+                    "예적금": getSum(data["예적금"], "금액"),
+                    "연금저축펀드": getEvalSum(data["연금저축펀드"]),
+                    "개인투자용국채": getSum(data["개인투자용국채"], "매입금액")
+                };
+                const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
+                return { totals, grandTotal };
+            }, [data]);
+
+            const menuItems = [
+                { id: 'Dashboard', label: '대시보드', icon: 'LayoutDashboard' },
+                { id: '입출금', label: '입출금', icon: 'Wallet' },
+                { id: '주식투자', label: '주식투자', icon: 'TrendingUp' },
+                { id: '예적금', label: '예적금', icon: 'PiggyBank' },
+                { id: '연금저축펀드', label: '연금저축펀드', icon: 'PieChart' },
+                { id: '개인투자용국채', label: '개인투자용국채', icon: 'ScrollText' },
+            ];
+
+            const formatKRW = (val) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(val);
+
+            const getAssetIcon = (id) => {
+                const item = menuItems.find(m => m.id === id);
+                return item ? item.icon : 'RefreshCcw';
+            };
+
+            const renderDetailView = (title) => {
+                const list = data[title] || [];
+                const headers = SHEET_CONFIG[title] || [];
+                const total = stats.totals[title];
+                const iconName = getAssetIcon(title);
+
+                return (
+                    <div className="space-y-6 animate-in">
+                        <header className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-5">
+                            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                                <Icon name={iconName} size={28} />
+                            </div>
+                            <div>
+                                <h2 className="text-slate-500 text-xs font-bold uppercase tracking-wider">{title} 자산 총액</h2>
+                                <p className="text-3xl font-bold text-slate-800 mt-1">{formatKRW(total)}</p>
+                            </div>
+                        </header>
+
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                            <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                                <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                                    <Icon name="List" size={16} className="text-slate-400" /> 상세 거래 내역
+                                </h3>
+                                <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">{list.length}건</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-slate-50 text-slate-500 font-medium">
+                                        <tr>
+                                            {headers.map(header => (
+                                                <th key={header} className="p-4 whitespace-nowrap text-[11px] uppercase tracking-wider">{header}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {list.map((row, i) => (
+                                            <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                                {headers.map((header) => (
+                                                    <td key={header} className="p-4 text-slate-600 whitespace-nowrap">
+                                                        <div className="flex items-center gap-2">
+                                                            {header === '날짜' && <Icon name="Calendar" size={12} className="text-slate-300" />}
+                                                            {typeof row[header] === 'number' 
+                                                                ? row[header].toLocaleString() 
+                                                                : (row[header] ? String(row[header]) : '-')}
+                                                        </div>
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {list.length === 0 && (
+                                    <div className="p-16 text-center">
+                                        <div className="inline-flex p-4 rounded-full bg-slate-50 text-slate-300 mb-4">
+                                            <Icon name="RefreshCcw" size={32} />
+                                        </div>
+                                        <p className="text-slate-400">데이터가 없거나 불러오는 중입니다.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
-                  ))}
+                );
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex">
+                    <aside className={`
+                        fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out
+                        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
+                    `}>
+                        <div className="p-6 flex items-center justify-between">
+                            <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2">
+                                <Icon name="TrendingUp" size={24} /> 자산관리
+                            </h1>
+                            <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400"><Icon name="X" /></button>
+                        </div>
+                        <nav className="mt-4 px-3 space-y-1">
+                            {menuItems.map(item => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
+                                    className={`
+                                        w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
+                                        ${activeTab === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-500 hover:bg-slate-50'}
+                                    `}
+                                >
+                                    <Icon name={item.icon} size={18} />
+                                    {item.label}
+                                </button>
+                            ))}
+                        </nav>
+                    </aside>
+
+                    <main className="flex-1 md:ml-64 p-4 md:p-8 min-w-0 pb-24">
+                        <div className="flex items-center justify-between mb-8">
+                            <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 bg-white rounded-lg shadow-sm border border-slate-200">
+                                <Icon name="Menu" size={20} />
+                            </button>
+                            <div className="hidden md:flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
+                                <Icon name="ShieldCheck" size={14} /> Asset Management System v1.0
+                            </div>
+                            <button 
+                                onClick={fetchData} 
+                                disabled={loading}
+                                className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm text-sm font-medium text-slate-600 hover:bg-slate-50 active:scale-95 transition-all border border-slate-200"
+                            >
+                                <Icon name="RefreshCcw" size={16} className={loading ? 'animate-spin' : ''} />
+                                {loading ? '동기화 중...' : '새로고침'}
+                            </button>
+                        </div>
+
+                        {activeTab === 'Dashboard' ? (
+                            <div className="space-y-6 animate-in">
+                                <div className="bg-slate-900 p-8 rounded-[2rem] text-white shadow-2xl relative overflow-hidden">
+                                    <div className="relative z-10">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Icon name="Activity" size={14} className="text-blue-400" />
+                                            <h3 className="text-slate-400 text-sm font-medium uppercase tracking-widest">Total Net Worth</h3>
+                                        </div>
+                                        <p className="text-4xl md:text-5xl font-bold tracking-tight">{formatKRW(stats.grandTotal)}</p>
+                                        <div className="mt-8 flex flex-wrap gap-3">
+                                            {Object.entries(stats.totals).map(([key, val]) => (
+                                                <div key={key} className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl backdrop-blur-sm flex items-center gap-2">
+                                                    <Icon name={getAssetIcon(key)} size={12} className="text-blue-400" />
+                                                    <div>
+                                                        <span className="text-[10px] text-slate-400 block uppercase">{key}</span>
+                                                        <span className="text-sm font-semibold">{formatKRW(val)}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="absolute -bottom-12 -right-12 text-white/5 transform -rotate-12">
+                                        <Icon name="PieChart" size={240} />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+                                    {menuItems.slice(1).map(item => (
+                                        <div 
+                                            key={item.id} 
+                                            onClick={() => setActiveTab(item.id)}
+                                            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group"
+                                        >
+                                            <div className="flex justify-between items-center">
+                                                <div className="p-3 rounded-2xl bg-slate-50 text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
+                                                    <Icon name={item.icon} size={22} />
+                                                </div>
+                                                <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest group-hover:text-blue-200 inline-flex items-center gap-1">
+                                                    상세보기 <Icon name="ChevronRight" size={10} />
+                                                </div>
+                                            </div>
+                                            <h4 className="mt-6 text-slate-500 text-xs font-bold uppercase tracking-wider">{item.label}</h4>
+                                            <p className="text-2xl font-bold text-slate-800 mt-1">{formatKRW(stats.totals[item.id])}</p>
+                                            <div className="mt-4 flex items-center gap-2">
+                                                <div className="flex-1 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                                    <div 
+                                                        className="bg-blue-600 h-full rounded-full transition-all duration-1000" 
+                                                        style={{ width: `${(stats.totals[item.id] / (stats.grandTotal || 1)) * 100}%` }}
+                                                    ></div>
+                                                </div>
+                                                <span className="text-[10px] font-bold text-slate-400">
+                                                    {Math.round((stats.totals[item.id] / (stats.grandTotal || 1)) * 100)}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            renderDetailView(activeTab)
+                        )}
+                    </main>
+
+                    <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-200 px-6 py-3 flex justify-between items-center md:hidden z-40">
+                        {menuItems.slice(0, 4).map(item => (
+                            <button 
+                                key={item.id} 
+                                onClick={() => setActiveTab(item.id)}
+                                className={`p-2 rounded-xl transition-all ${activeTab === item.id ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}
+                            >
+                                <Icon name={item.icon} size={24} />
+                            </button>
+                        ))}
+                        <button className="p-3 bg-slate-900 text-white rounded-full shadow-lg transform -translate-y-4 border-4 border-slate-50">
+                            <Icon name="PlusCircle" size={24} />
+                        </button>
+                    </nav>
                 </div>
-              </div>
-              <div className="absolute -bottom-12 -right-12 text-white/5 transform -rotate-12">
-                <PieChart size={240} />
-              </div>
-            </div>
+            );
+        };
 
-            {/* Grid Menu */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
-              {menuItems.slice(1).map(item => (
-                <div 
-                  key={item.id} 
-                  onClick={() => setActiveTab(item.id)}
-                  className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group"
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="p-3 rounded-2xl bg-slate-50 text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
-                      <item.icon size={22} />
-                    </div>
-                    <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest group-hover:text-blue-200">View Details</div>
-                  </div>
-                  <h4 className="mt-6 text-slate-500 text-xs font-bold uppercase tracking-wider">{item.label}</h4>
-                  <p className="text-2xl font-bold text-slate-800 mt-1">{formatKRW(stats.totals[item.id])}</p>
-                  <div className="mt-4 flex items-center gap-2">
-                    <div className="flex-1 bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                      <div 
-                        className="bg-blue-600 h-full rounded-full transition-all duration-1000" 
-                        style={{ width: `${(stats.totals[item.id] / (stats.grandTotal || 1)) * 100}%` }}
-                      ></div>
-                    </div>
-                    <span className="text-[10px] font-bold text-slate-400">
-                      {Math.round((stats.totals[item.id] / (stats.grandTotal || 1)) * 100)}%
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          renderDetailView(activeTab)
-        )}
-      </main>
-
-      {/* Mobile Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-200 px-6 py-3 flex justify-between items-center md:hidden z-40">
-        {menuItems.slice(0, 4).map(item => (
-          <button 
-            key={item.id} 
-            onClick={() => setActiveTab(item.id)}
-            className={`p-2 rounded-xl transition-all ${activeTab === item.id ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}
-          >
-            <item.icon size={24} />
-          </button>
-        ))}
-        <button className="p-3 bg-slate-900 text-white rounded-full shadow-lg transform -translate-y-4 border-4 border-slate-50">
-          <PlusCircle size={24} />
-        </button>
-      </nav>
-    </div>
-  );
-};
-
-export default App;
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
