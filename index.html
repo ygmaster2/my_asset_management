@@ -161,21 +161,31 @@
             };
 
             const stats = useMemo(() => {
-                const getSum = (arr, key) => (arr || []).reduce((sum, item) => sum + (Number(item[key]) || 0), 0);
-                const getEvalSum = (arr) => (arr || []).reduce((sum, item) => {
-                    const buy = Number(item['매입금액']) || 0;
-                    const profit = Number(item['평가손익']) || 0;
-                    return sum + buy + profit;
-                }, 0);
-
-                const totals = {
-                    "입출금": getSum(data["입출금"], "금액"),
-                    "주식투자": getEvalSum(data["주식투자"]),
-                    "예적금": getSum(data["예적금"], "금액"),
-                    "연금저축펀드": getEvalSum(data["연금저축펀드"]),
-                    "개인투자용국채": getSum(data["개인투자용국채"], "매입금액")
+                const getLatestValue = (arr, key) => {
+                    if (!arr || arr.length === 0) return 0;
+                    // 서버에서 역순으로 보내주므로 arr[0]이 가장 최신 데이터입니다.
+                    return Number(arr[0][key]) || 0;
                 };
 
+                const getLatestEval = (arr) => {
+                    if (!arr || arr.length === 0) return 0;
+                    // 서버에서 역순으로 보내주므로 arr[0]이 가장 최신 데이터입니다.
+                    const firstRow = arr[0]; 
+                    const buy = Number(firstRow['매입금액']) || 0;
+                    const profit = Number(firstRow['평가손익']) || 0;
+                    return buy + profit;
+                };
+
+                const totals = {
+                    "입출금": getLatestValue(data["입출금"], "금액"),
+                    "주식투자": getLatestEval(data["주식투자"]),
+                    "예적금": getLatestValue(data["예적금"], "금액"),
+                    "연금저축펀드": getLatestEval(data["연금저축펀드"]),
+                    "개인투자용국채": getLatestValue(data["개인투자용국채"], "매입금액")
+                };
+
+                const getSum = (arr, key) => (arr || []).reduce((sum, item) => sum + (Number(item[key]) || 0), 0);
+                
                 const stockInvestSum = getSum(data["주식투자"], "매입금액");
                 const stockProfitSum = getSum(data["주식투자"], "평가손익");
                 const stockYield = stockInvestSum > 0 ? (stockProfitSum / stockInvestSum) * 100 : 0;
@@ -227,7 +237,7 @@
                 // 낙관적 업데이트: 화면에 즉시 반영
                 const newData = { ...data };
                 if (isNew) {
-                    // 서버에서 최신순으로 데이터를 보내므로, 이중 정렬 오류를 막기 위해 새 데이터를 배열의 맨 앞에 추가합니다.
+                    // 서버에서 최신순으로 데이터를 보내므로, 새 데이터를 배열의 맨 앞에 추가합니다.
                     newData[title] = [editForm, ...newData[title]];
                 } else {
                     // 수정의 경우 해당 인덱스 교체
@@ -240,11 +250,14 @@
                 setEditingItem(null);
 
                 try {
+                    // 서버는 과거순(오래된 순)이므로 프론트엔드의 최신순 인덱스를 역계산하여 전달합니다.
+                    const actualIndex = isNew ? null : (originalData[title].length - 1 - index);
+
                     const payload = {
                         action: isNew ? 'append' : 'update',
                         sheetName: title,
                         data: editForm,
-                        rowIndex: index // 인덱스 역계산 오류 제거, 원본 인덱스 그대로 전달
+                        rowIndex: actualIndex 
                     };
 
                     await fetch(API_URL, {
@@ -276,10 +289,13 @@
                     setLoading(true);
 
                     try {
+                        // 서버는 과거순이므로 삭제할 실제 시트 행 위치를 역계산하여 전달합니다.
+                        const actualIndex = originalData[title].length - 1 - index;
+
                         const payload = {
                             action: 'delete',
                             sheetName: title,
-                            rowIndex: index // 구글 시트 엉뚱한 행이 지워지는 원인이었던 역계산 로직 완벽 제거
+                            rowIndex: actualIndex
                         };
 
                         await fetch(API_URL, {
@@ -309,7 +325,10 @@
             };
 
             const renderDetailView = (title) => {
-                const list = data[title] || [];
+                const rawList = data[title] || [];
+                // 서버에서 이미 최신순(.reverse())으로 데이터를 주므로, 프론트에서 다시 reverse 할 필요 없이 원본 인덱스만 매핑합니다.
+                const list = [...rawList].map((item, idx) => ({ ...item, _originalIdx: idx }));
+                
                 const headers = SHEET_CONFIG[title] || [];
                 const total = stats.totals[title];
                 const iconName = getAssetIcon(title);
