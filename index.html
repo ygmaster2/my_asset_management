@@ -205,14 +205,26 @@
                     "개인투자용국채": getLatestValue(data["개인투자용국채"], "매입금액")
                 };
 
-                const getSum = (arr, key) => (arr || []).reduce((sum, item) => sum + (Number(item[key]) || 0), 0);
+                // 변경된 부분: 가장 최근 월(yyyy-MM)을 추출하여 해당 월의 데이터만 합산하도록 수정
+                const getSumForLatestMonth = (arr, key) => {
+                    if (!arr || arr.length === 0) return 0;
+                    
+                    const latestMonth = arr.reduce((max, item) => {
+                        const month = (item['날짜'] || '').substring(0, 7);
+                        return month > max ? month : max;
+                    }, (arr[0]['날짜'] || '').substring(0, 7));
+
+                    return arr
+                        .filter(item => (item['날짜'] || '').substring(0, 7) === latestMonth)
+                        .reduce((sum, item) => sum + (Number(item[key]) || 0), 0);
+                };
                 
-                const stockInvestSum = getSum(data["주식투자"], "매입금액");
-                const stockProfitSum = getSum(data["주식투자"], "평가손익");
+                const stockInvestSum = getSumForLatestMonth(data["주식투자"], "매입금액");
+                const stockProfitSum = getSumForLatestMonth(data["주식투자"], "평가손익");
                 const stockYield = stockInvestSum > 0 ? (stockProfitSum / stockInvestSum) * 100 : 0;
 
-                const pensionInvestSum = getSum(data["연금저축펀드"], "매입금액");
-                const pensionProfitSum = getSum(data["연금저축펀드"], "평가손익");
+                const pensionInvestSum = getSumForLatestMonth(data["연금저축펀드"], "매입금액");
+                const pensionProfitSum = getSumForLatestMonth(data["연금저축펀드"], "평가손익");
                 const pensionYield = pensionInvestSum > 0 ? (pensionProfitSum / pensionInvestSum) * 100 : 0;
 
                 const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
