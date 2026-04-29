@@ -253,10 +253,10 @@
                 return { totals, grandTotal, stockInvestSum, stockProfitSum, stockYield, pensionInvestSum, pensionProfitSum, pensionYield };
             }, [data]);
 
+            // 차트 데이터 계산: 1월은 당해년도 1월 1일과 말일 비교, 나머지 달은 이전 달 말일과 비교
             const yearlyChartData = useMemo(() => {
-                const getEndBalance = (arr, valKey, yyyyMM) => {
+                const getBalanceAsOf = (arr, valKey, targetStr) => {
                     if (!arr || arr.length === 0) return 0;
-                    const targetStr = yyyyMM + '-31';
                     const filtered = arr.filter(item => (item['날짜'] || '') <= targetStr);
                     if (filtered.length === 0) return 0;
                     const latestDate = filtered.reduce((max, item) => {
@@ -272,23 +272,33 @@
                         }, 0);
                 };
 
-                const combinedBalance = (yyyy, mm) => {
-                    const yyyyMM = `${yyyy}-${String(mm).padStart(2, '0')}`;
-                    const val1 = getEndBalance(data["입출금"], "금액", yyyyMM);
-                    const val2 = getEndBalance(data["예적금"], "금액", yyyyMM);
-                    const val3 = getEndBalance(data["개인투자용국채"], "매입금액", yyyyMM);
+                const combinedBalanceAsOf = (targetStr) => {
+                    const val1 = getBalanceAsOf(data["입출금"], "금액", targetStr);
+                    const val2 = getBalanceAsOf(data["예적금"], "금액", targetStr);
+                    const val3 = getBalanceAsOf(data["개인투자용국채"], "매입금액", targetStr);
                     return val1 + val2 + val3;
                 };
 
                 const changes = [];
                 let maxAbs = 1;
                 let totalGrowth = 0;
-                
-                let prevMonthBal = combinedBalance(selectedYear - 1, 12);
 
                 for (let m = 1; m <= 12; m++) {
-                    const currMonthBal = combinedBalance(selectedYear, m);
-                    const change = currMonthBal - prevMonthBal;
+                    const currMonthEndStr = `${selectedYear}-${String(m).padStart(2, '0')}-31`;
+                    const currMonthBal = combinedBalanceAsOf(currMonthEndStr);
+                    let change = 0;
+                    
+                    if (m === 1) {
+                        // 1월의 경우: 작년 12월이 아닌 당해년도 1월 1일 기준 잔액과 비교
+                        const janFirstBal = combinedBalanceAsOf(`${selectedYear}-01-01`);
+                        change = currMonthBal - janFirstBal;
+                    } else {
+                        // 다른 월의 경우: 직전 월 말일 잔액 기준으로 증감액 계산
+                        const prevMonthEndStr = `${selectedYear}-${String(m - 1).padStart(2, '0')}-31`;
+                        const prevMonthBal = combinedBalanceAsOf(prevMonthEndStr);
+                        change = currMonthBal - prevMonthBal;
+                    }
+                    
                     totalGrowth += change;
                     
                     if (Math.abs(change) > maxAbs) maxAbs = Math.abs(change);
@@ -296,7 +306,6 @@
                         label: m + '월',
                         value: change
                     });
-                    prevMonthBal = currMonthBal;
                 }
 
                 const chart = changes.map(c => ({
