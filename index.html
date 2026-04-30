@@ -331,6 +331,25 @@
                 const item = menuItems.find(m => m.id === id);
                 return item ? item.icon : 'RefreshCcw';
             };
+            
+            // 기존 데이터에서 유니크한 항목들을 뽑아오는 함수 (드롭다운 용도)
+            const getUniqueValues = (tabName, fieldName) => {
+                if (!data[tabName]) return [];
+                const values = data[tabName].map(item => item[fieldName]).filter(val => val !== undefined && val !== null && val !== '');
+                return [...new Set(values)];
+            };
+
+            // 드롭다운(자동완성) 처리를 할 필드인지 확인하는 함수
+            const isDropdownField = (title, field) => {
+                const dropdownMap = {
+                    "입출금": ["금융사", "종류"],
+                    "주식투자": ["증권사", "종목명"],
+                    "예적금": ["상품명", "은행"],
+                    "연금저축펀드": ["증권사", "종목명"],
+                    "개인투자용국채": ["증권사"]
+                };
+                return dropdownMap[title] && dropdownMap[title].includes(field);
+            };
 
             const openEditModal = (title, row = null, index = null) => {
                 if (row === null) {
@@ -539,18 +558,30 @@
                                     {editingItem.title} {editingItem.isNew ? "신규 추가" : "데이터 수정"}
                                 </h3>
                                 <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 hide-scrollbar">
-                                    {SHEET_CONFIG[editingItem.title].map(field => (
-                                        <div key={field}>
-                                            <label className="text-[11px] font-bold text-slate-400 uppercase mb-1 block">{field}</label>
-                                            <input 
-                                                type={isNumericField(field) ? 'number' : (field === '날짜' ? 'date' : 'text')}
-                                                value={editForm[field] || ''}
-                                                placeholder={`${field} 입력`}
-                                                onChange={(e) => setEditForm({...editForm, [field]: e.target.type === 'number' ? Number(e.target.value) : e.target.value})}
-                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-theme"
-                                            />
-                                        </div>
-                                    ))}
+                                    {SHEET_CONFIG[editingItem.title].map(field => {
+                                        const isDropdown = isDropdownField(editingItem.title, field);
+                                        const listId = isDropdown ? `list-${editingItem.title}-${field}` : undefined;
+                                        return (
+                                            <div key={field}>
+                                                <label className="text-[11px] font-bold text-slate-400 uppercase mb-1 block">{field}</label>
+                                                <input 
+                                                    type={isNumericField(field) ? 'number' : (field === '날짜' ? 'date' : 'text')}
+                                                    value={editForm[field] || ''}
+                                                    placeholder={`${field} 입력`}
+                                                    onChange={(e) => setEditForm({...editForm, [field]: e.target.type === 'number' ? Number(e.target.value) : e.target.value})}
+                                                    list={listId}
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-theme"
+                                                />
+                                                {isDropdown && (
+                                                    <datalist id={listId}>
+                                                        {getUniqueValues(editingItem.title, field).map((val, idx) => (
+                                                            <option key={idx} value={val} />
+                                                        ))}
+                                                    </datalist>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                                 <div className="mt-6 flex gap-3">
                                     <button onClick={() => setEditingItem(null)} className="flex-1 py-3 rounded-xl font-bold bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 transition-all">취소</button>
